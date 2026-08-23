@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+
+# Local secrets and machine-specific environment overrides.
+.env
+.env.*
+!.env.example

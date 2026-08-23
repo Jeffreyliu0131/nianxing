@@ -1,0 +1,29 @@
+{
+  "id": "/",
+  "name": "念行 · 计划与灵感",
+  "short_name": "念行",
+  "description": "用一句话记录计划、灵感与学习问题，本地优先，离线可用。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8f6f1",
+  "theme_color": "#f8f6f1",
+  "categories": ["productivity", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

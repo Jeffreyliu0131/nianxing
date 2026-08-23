@@ -1,0 +1,100 @@
+import { createContext, type PropsWithChildren, useContext, useMemo, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { CheckIcon, ChevronDownIcon } from "@radix-ui/react-icons";
+import { compactGeometry, tallGeometry, type MobileDeviceGeometry } from "./geometry";
+
+export type MobileDeviceId = "compact" | "tall";
+
+type MobileDevicePreset = {
+  id: MobileDeviceId;
+  label: string;
+  geometry: MobileDeviceGeometry;
+  reservesBottomNavigation: boolean;
+};
+
+export const mobileDevices: Record<MobileDeviceId, MobileDevicePreset> = {
+  compact: {
+    id: "compact",
+    label: "Compact",
+    geometry: compactGeometry,
+    reservesBottomNavigation: false,
+  },
+  tall: {
+    id: "tall",
+    label: "Tall",
+    geometry: tallGeometry,
+    reservesBottomNavigation: true,
+  },
+};
+
+type MobileDeviceContextValue = {
+  device: MobileDevicePreset;
+  deviceId: MobileDeviceId;
+  setDeviceId: (deviceId: MobileDeviceId) => void;
+};
+
+const MobileDeviceContext = createContext<MobileDeviceContextValue | null>(null);
+
+export function MobileDeviceProvider({ children }: PropsWithChildren) {
+  const [deviceId, setDeviceId] = useState<MobileDeviceId>("compact");
+  const value = useMemo(
+    () => ({ device: mobileDevices[deviceId], deviceId, setDeviceId }),
+    [deviceId],
+  );
+
+  return <MobileDeviceContext.Provider value={value}>{children}</MobileDeviceContext.Provider>;
+}
+
+export function useMobileDevice() {
+  const context = useContext(MobileDeviceContext);
+
+  if (!context) {
+    throw new Error("useMobileDevice must be used inside MobileDeviceProvider");
+  }
+
+  return context;
+}
+
+export function DevicePicker() {
+  const { device, deviceId, setDeviceId } = useMobileDevice();
+
+  return (
+    <DropdownMenu.Root>
+      <div className="device-menu-bar" data-testid="device-menu-bar">
+        <DropdownMenu.Trigger asChild>
+          <button
+            className="device-picker-trigger"
+            data-testid="device-picker"
+            aria-label={`Preview device: ${device.label}`}
+            type="button"
+          >
+            <span>{device.label}</span>
+            <ChevronDownIcon aria-hidden="true" />
+          </button>
+        </DropdownMenu.Trigger>
+      </div>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="device-picker-menu" align="end" sideOffset={8} collisionPadding={12}>
+          <DropdownMenu.RadioGroup
+            value={deviceId}
+            onValueChange={(value) => setDeviceId(value as MobileDeviceId)}
+          >
+            {Object.values(mobileDevices).map((option) => (
+              <DropdownMenu.RadioItem
+                key={option.id}
+                className="device-picker-item"
+                value={option.id}
+                data-testid={`device-option-${option.id}`}
+              >
+                <span>{option.label}</span>
+                <DropdownMenu.ItemIndicator className="device-picker-check">
+                  <CheckIcon aria-hidden="true" />
+                </DropdownMenu.ItemIndicator>
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}

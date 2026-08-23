@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786758623489,
+      "tag": "0000_rich_frank_castle",
+      "breakpoints": true
+    }
+  ]
+}
