@@ -173,7 +173,7 @@ test("stores state by user and rejects stale revisions", async () => {
   const initial = sampleData();
   const created = await worker.fetch(new Request("https://example.test/api/state", {
     method: "PUT",
-    headers: { ...authHeaders("user-a"), "content-type": "application/json" },
+    headers: { ...authHeaders("user-a"), "x-nianxing-account-id": "user-a", "content-type": "application/json" },
     body: JSON.stringify({ baseRevision: 0, data: initial }),
   }), env);
   assert.equal(created.status, 200);
@@ -189,7 +189,7 @@ test("stores state by user and rejects stale revisions", async () => {
 
   const stale = await worker.fetch(new Request("https://example.test/api/state", {
     method: "PUT",
-    headers: { ...authHeaders("user-a"), "content-type": "application/json" },
+    headers: { ...authHeaders("user-a"), "x-nianxing-account-id": "user-a", "content-type": "application/json" },
     body: JSON.stringify({ baseRevision: 0, data: sampleData("不应覆盖") }),
   }), env);
   assert.equal(stale.status, 409);
@@ -197,7 +197,7 @@ test("stores state by user and rejects stale revisions", async () => {
 
   const updated = await worker.fetch(new Request("https://example.test/api/state", {
     method: "PUT",
-    headers: { ...authHeaders("user-a"), "content-type": "application/json" },
+    headers: { ...authHeaders("user-a"), "x-nianxing-account-id": "user-a", "content-type": "application/json" },
     body: JSON.stringify({ baseRevision: 1, data: sampleData("已安全更新") }),
   }), env);
   assert.equal(updated.status, 200);
@@ -207,7 +207,7 @@ test("stores state by user and rejects stale revisions", async () => {
 test("keeps DeepSeek disabled until a server secret exists", async () => {
   const response = await worker.fetch(new Request("https://example.test/api/organize", {
     method: "POST",
-    headers: { ...authHeaders("user-a"), "content-type": "application/json" },
+    headers: { ...authHeaders("user-a"), "x-nianxing-account-id": "user-a", "content-type": "application/json" },
     body: JSON.stringify({ text: "明天学习 PWA" }),
   }), { ASSETS: assets(), DB: new FakeD1() });
   assert.equal(response.status, 503);
@@ -219,4 +219,20 @@ test("emits the files required by Sites packaging", async () => {
   await access(new URL("../dist/server/index.js", import.meta.url));
   await access(new URL("../dist/.openai/hosting.json", import.meta.url));
   await access(new URL("../dist/.openai/drizzle/0000_rich_frank_castle.sql", import.meta.url));
+});
+
+test("rejects stale-account writes before touching a different user's state", async () => {
+  const env = { ASSETS: assets(), DB: new FakeD1() };
+  for (const expected of [undefined, "user-a"]) {
+    const response = await worker.fetch(new Request("https://example.test/api/state", {
+      method: "PUT", headers: { ...authHeaders("user-b"), ...(expected ? { "x-nianxing-account-id": expected } : {}), "content-type": "application/json" },
+      body: JSON.stringify({ baseRevision: 0, data: sampleData("A private data") }),
+    }), env);
+    assert.equal(response.status, 412);
+    assert.equal((await response.json()).error, "ACCOUNT_CHANGED");
+  }
+  const state = await worker.fetch(new Request("https://example.test/api/state", { headers: authHeaders("user-b") }), env);
+  const payload = await state.json();
+  assert.equal(payload.user.id, "user-b");
+  assert.equal(payload.data, null);
 });

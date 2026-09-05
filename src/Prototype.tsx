@@ -44,6 +44,8 @@ import {
 import { createId, type AppData, type CaptureKind, type DraftCapture, type Idea, type Task } from "./domain/types";
 import { exportAppData, loadAppData, saveAppData } from "./data/localStore";
 import { organizeCapture } from "./services/organizer";
+import { restoreDeletedRecord } from "./domain/recovery";
+import { mergeAppData } from "./services/cloudSync";
 import { useCloudSync, type CloudSyncStatus } from "./hooks/useCloudSync";
 import { usePwa } from "./hooks/usePwa";
 
@@ -396,9 +398,9 @@ function KindSelector({ value, onChange }: { value: CaptureKind; onChange: (kind
   );
 }
 
-export default function Prototype() {
+export default function Prototype({ accountId = null }: { accountId?: string | null }) {
   usePinnedDeviceViewport();
-  const [data, setData] = useState<AppData>(() => loadAppData());
+  const [data, setData] = useState<AppData>(() => loadAppData(accountId));
   const [view, setView] = useState<View>("today");
   const [ideaFilter, setIdeaFilter] = useState<IdeaFilter>("all");
   const [captureText, setCaptureText] = useState("");
@@ -412,6 +414,7 @@ export default function Prototype() {
   const [ideaForm, setIdeaForm] = useState<Idea | null>(null);
   const [ideaSheetOpen, setIdeaSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [undo, setUndo] = useState<{ kind: "task"; record: Task } | { kind: "idea"; record: Idea } | null>(null);
   const [toast, setToast] = useState("");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -425,7 +428,7 @@ export default function Prototype() {
   const { bottomInset, isKeyboardVisible } = useKeyboardInsets();
   const nativeKeyboard = useNativeKeyboardInset();
   const pwa = usePwa();
-  const cloud = useCloudSync(data, setData, online);
+  const cloud = useCloudSync(data, setData, online, accountId);
   const localAiConfigured = import.meta.env.DEV && import.meta.env.VITE_AI_LOCAL_ENABLED === "true";
   const aiConfigured = cloud.aiConfigured || localAiConfigured;
 
@@ -480,7 +483,7 @@ export default function Prototype() {
     if (!silent && voiceHadResultRef.current) setToast("语音已经记下，可以继续补充");
   };
 
-  useEffect(() => { if (!saveAppData(data)) setToast("这次修改暂时无法保存，请导出备份"); }, [data]);
+  useEffect(() => { if (!saveAppData(data, accountId)) setToast("这次修改暂时无法保存，请导出备份"); }, [data, accountId]);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -517,6 +520,7 @@ export default function Prototype() {
   };
   const deleteTask = () => {
     if (!taskForm) return;
+    setUndo({ kind: "task", record: taskForm });
     const deletedAt = new Date().toISOString();
     setData((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== taskForm.id), deleted: { ...current.deleted, tasks: { ...current.deleted.tasks, [taskForm.id]: deletedAt } } }));
     setTaskSheetOpen(false); setToast("已从时间线移除");
@@ -530,6 +534,7 @@ export default function Prototype() {
   };
   const deleteIdea = () => {
     if (!ideaForm) return;
+    setUndo({ kind: "idea", record: ideaForm });
     const deletedAt = new Date().toISOString();
     setData((current) => ({ ...current, ideas: current.ideas.filter((idea) => idea.id !== ideaForm.id), deleted: { ...current.deleted, ideas: { ...current.deleted.ideas, [ideaForm.id]: deletedAt } } }));
     setIdeaSheetOpen(false); setToast("已从灵感库移除");
@@ -720,6 +725,17 @@ export default function Prototype() {
 
       <BottomSheet open={settingsOpen} onOpenChange={setSettingsOpen} title="设置" description="模型可选，记录始终属于你" snap={0.6}>
         <div className="settings-list">
+          {undo && <button className="setting-row setting-row--button" type="button" onClick={() => {
+            setData(current => restoreDeletedRecord(current, undo)); setUndo(null); setToast("已恢复上次删除的记录");
+          }}>撤销上次删除</button>}
+          {accountId && <button className="setting-row setting-row--button" type="button" onClick={() => {
+            const guest = loadAppData(null);
+            const transferable = { ...guest, tasks: guest.tasks.filter(item => item.source !== "seed"), ideas: guest.ideas.filter(item => item.source !== "seed") };
+            if (window.confirm(`将本机访客空间的 ${transferable.tasks.length} 个计划和 ${transferable.ideas.length} 条灵感复制到当前账号？原记录仍保留。`)) {
+              setData(current => mergeAppData(current, transferable));
+              setToast("访客记录已合并到当前空间，将按当前账号同步");
+            }
+          }}>将本机访客记录复制到当前账号</button>}
           <div className="setting-row"><span className="setting-icon"><CloudCheck size={19} /></span><span><b>云端同步</b><small>{syncStatusLabel(cloud.status)}{cloud.user.email ? ` · ${cloud.user.email}` : ""}</small></span><span className={`status-dot ${cloud.status === "synced" ? "is-active" : ""}`} /></div>
           <div className="setting-row"><span className="setting-icon"><MagicWand size={19} /></span><span><b>智能整理</b><small>{aiConfigured ? localAiConfigured && !cloud.aiConfigured ? "DeepSeek 本地代理已配置" : "DeepSeek 服务端密钥已配置" : "等待配置 DeepSeek API Key"}</small></span><span className={`status-dot ${aiConfigured ? "is-active" : ""}`} /></div>
           <button className="setting-row setting-row--button" type="button" onClick={async () => { if (pwa.installed) return setToast("念行已经安装在桌面"); const result = await pwa.install(); if (result === "unavailable") setToast("iPhone：点分享，再选“添加到主屏幕”"); }}><span className="setting-icon"><DownloadSimple size={19} /></span><span><b>{pwa.installed ? "已安装到桌面" : "安装到桌面"}</b><small>{pwa.canInstall ? "点击完成安装" : "支持 iPhone 与 Android PWA"}</small></span><CaretRight size={17} /></button>
@@ -728,7 +744,7 @@ export default function Prototype() {
         </div>
       </BottomSheet>
 
-      {toast ? <div className="toast" role="status" aria-live="polite" style={{ bottom: (nativeKeyboard.native ? nativeKeyboard.inset : bottomInset) + 118 }}>{toast}</div> : null}
+      {toast ? <div className="toast" role="status" aria-live="polite" style={{ bottom: (nativeKeyboard.native ? nativeKeyboard.inset : bottomInset) + 118 }}>{toast}{undo && <button type="button" onClick={() => { setData(current => restoreDeletedRecord(current, undo)); setUndo(null); setToast("已恢复删除的记录"); }}>撤销删除</button>}</div> : null}
     </>
   );
 }

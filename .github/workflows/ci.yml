@@ -21,5 +21,6 @@ jobs:
       - run: npm run check:runtime
       - run: npm run build
       - run: npm run test:sites
+      - run: npm run test:domain
       - run: npx playwright install --with-deps chromium
       - run: npm run test:runtime

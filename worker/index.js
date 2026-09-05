@@ -116,6 +116,7 @@ function readUser(request) {
 
 function publicUser(user) {
   return {
+    id: user.id,
     ...(user.email ? { email: user.email } : {}),
     ...(user.displayName ? { displayName: user.displayName } : {}),
   };
@@ -329,6 +330,11 @@ async function handleApi(request, env, ctx) {
   if (!user) return apiJson({ error: "SIGN_IN_REQUIRED" }, 401);
 
   if (url.pathname === "/api/state") {
+    // This is an expected-account precondition, never an authentication source.
+    const expected = request.headers.get("x-nianxing-account-id");
+    if ((request.method === "PUT" && !expected) || (expected && expected !== user.id)) {
+      return apiJson({ error: "ACCOUNT_CHANGED" }, 412);
+    }
     if (request.method === "GET") return getState(request, env, user);
     if (request.method === "PUT") return putState(request, env, user);
     return apiJson({ error: "METHOD_NOT_ALLOWED" }, 405);

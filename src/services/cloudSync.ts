@@ -2,6 +2,7 @@ import { isPristineSeedData, migrateAppData } from "../data/localStore";
 import type { AppData, Idea, Task } from "../domain/types";
 
 export type CloudUser = {
+  id?: string;
   email?: string;
   displayName?: string;
 };
@@ -17,6 +18,7 @@ export type CloudSnapshot = {
 export class CloudUnavailableError extends Error {}
 
 export class CloudAuthError extends Error {}
+export class CloudAccountChangedError extends Error {}
 
 export class CloudConflictError extends Error {
   snapshot: CloudSnapshot;
@@ -88,6 +90,7 @@ export function appDataFingerprint(data: AppData) {
 }
 
 async function readSnapshot(response: Response): Promise<CloudSnapshot> {
+  if (response.status === 412) throw new CloudAccountChangedError("ACCOUNT_CHANGED");
   if (response.status === 401) throw new CloudAuthError("SIGN_IN_REQUIRED");
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) throw new CloudUnavailableError("CLOUD_API_UNAVAILABLE");
@@ -100,29 +103,32 @@ async function readSnapshot(response: Response): Promise<CloudSnapshot> {
     updatedAt: typeof payload?.updatedAt === "string" ? payload.updatedAt : null,
     aiConfigured: payload?.aiConfigured === true,
     user: {
+      id: typeof payload?.user?.id === "string" ? payload.user.id : undefined,
       email: typeof payload?.user?.email === "string" ? payload.user.email : undefined,
       displayName: typeof payload?.user?.displayName === "string" ? payload.user.displayName : undefined,
     },
   };
 }
 
-export async function fetchCloudSnapshot(signal?: AbortSignal) {
+export async function fetchCloudSnapshot(signal?: AbortSignal, accountId?: string) {
   const response = await fetch("/api/state", {
     method: "GET",
-    headers: { accept: "application/json" },
+    headers: { accept: "application/json", ...(accountId ? { "x-nianxing-account-id": accountId } : {}) },
     cache: "no-store",
     credentials: "same-origin",
     signal,
   });
   if (response.status === 404) throw new CloudUnavailableError("CLOUD_API_UNAVAILABLE");
+  if (response.status === 401) throw new CloudAuthError("SIGN_IN_REQUIRED");
+  if (response.status === 412) throw new CloudAccountChangedError("ACCOUNT_CHANGED");
   if (!response.ok) throw new Error(`CLOUD_${response.status}`);
   return readSnapshot(response);
 }
 
-export async function saveCloudSnapshot(data: AppData, baseRevision: number, signal?: AbortSignal) {
+export async function saveCloudSnapshot(data: AppData, baseRevision: number, accountId: string, signal?: AbortSignal) {
   const response = await fetch("/api/state", {
     method: "PUT",
-    headers: { "content-type": "application/json", accept: "application/json" },
+    headers: { "content-type": "application/json", accept: "application/json", "x-nianxing-account-id": accountId },
     body: JSON.stringify({ baseRevision, data }),
     cache: "no-store",
     credentials: "same-origin",

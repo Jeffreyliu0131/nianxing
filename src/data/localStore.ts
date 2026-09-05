@@ -1,7 +1,13 @@
 import { addLocalDays, atLocalTime } from "../domain/date";
 import { createId, type AppData, type Idea, type Task } from "../domain/types";
 
-const STORAGE_KEY = "nianxing.app-data.v1";
+const LEGACY_KEY = "nianxing.app-data.v1";
+export function storageKey(accountId: string | null) {
+  return accountId ? `nianxing.account.${encodeURIComponent(accountId)}.v2` : "nianxing.guest.v2";
+}
+export function emptyAppData(): AppData {
+  return { schemaVersion: 2, tasks: [], ideas: [], deleted: { tasks: {}, ideas: {} } };
+}
 
 function seedData(now = new Date()): AppData {
   const createdAt = now.toISOString();
@@ -162,19 +168,19 @@ export function isPristineSeedData(data: AppData) {
     && Object.keys(data.deleted.ideas).length === 0;
 }
 
-export function loadAppData() {
+export function loadAppData(accountId: string | null = null) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return seedData();
-    return migrateAppData(JSON.parse(raw)) || seedData();
+    const raw = localStorage.getItem(storageKey(accountId)) || (accountId === null ? localStorage.getItem(LEGACY_KEY) : null);
+    if (!raw) return accountId === null ? seedData() : emptyAppData();
+    return migrateAppData(JSON.parse(raw)) || (accountId === null ? seedData() : emptyAppData());
   } catch {
-    return seedData();
+    return accountId === null ? seedData() : emptyAppData();
   }
 }
 
-export function saveAppData(data: AppData) {
+export function saveAppData(data: AppData, accountId: string | null = null) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(storageKey(accountId), JSON.stringify(data));
     return true;
   } catch {
     return false;
