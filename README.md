@@ -1,16 +1,18 @@
-# 念行
+# Nianxing · 念行
+
+**Capture the thought now. Decide how to organize it before saving.**
+
+A local-first PWA for tasks, plans, and ideas. Type or speak into one inbox, review the proposed draft, and confirm exactly what gets saved. An undated task can stay undated; AI does not invent a commitment on your behalf.
+
+**Key choice:** AI prepares an editable draft; the user owns the final save. Local capture remains available without the optional model service, and account sync is optional.
+
+[**Run locally**](#本地运行) · [Product requirements](docs/product/requirements.md) · [Architecture](docs/architecture/architecture.md) · [中文说明](#中文说明)
+
+**Status:** working personal prototype with synthetic workflow tests. External adoption and reductions in organization effort have not been measured. AI coding agents assisted implementation and review under my direction.
+
+## 中文说明
 
 念行是一款本地优先的个人行动与灵感 PWA。一个输入口同时承接任务、明日计划、学习问题和临时想法；AI 只生成可审阅的整理草稿，最终保存始终由用户确认。
-
-## 2026-09-07 确认与保存一致性
-
-任务可保留 `scheduledAt: null`，在“待安排”中可编辑、完成或删除；清空已排期任务的时间也能回到待安排。旧有效日期保持原值，不反向推断用户当时是否指定。未知时长不补成 30 分钟，不计入已估时长。
-
-“周天”与“周日”使用同一规则。只给日期或时段时，本地仍给出建议时刻（如下午 14:00），确认页明确标为建议并允许清空。确认页展示原始输入、标题、类型、时间、时长、备注和标签；保存不再补入未展示的安排。整理过程绑定输入版本，保存旧结果不会清掉期间新写的输入，取消确认保留输入。
-
-验证通过：构建与运行时完整性、6 项领域/存储测试、9 项 Worker 测试、11 项 Playwright 回归。390px 确认页和待安排列表已检查；覆盖日期同义表达、本地/云端往返、旧记录兼容、延迟整理时新输入保留、取消、排期和删除恢复。点击提交/保存时保留输入焦点直到操作完成，避免键盘收起移动按钮造成首次点击落空。仅合成输入和替身，没有真实模型或站点部署。
-
-源码里程碑：[2026-09-07 捕捉与确认迭代](https://github.com/Jeffreyliu0131/nianxing/commit/aaec188385ce339973a7a7b9ea507fa14b56be98)；当前验证状态见 [GitHub CI](https://github.com/Jeffreyliu0131/nianxing/actions/workflows/ci.yml)。
 
 ## 个人职责与证据边界
 
@@ -80,3 +82,13 @@ npm run test:runtime
 下一次验证：成人用合成任务完成文字捕捉、草稿修改、确认、误删恢复、断网重连和账号切换。记录从打开到保存的动作数与耗时、草稿需修改的比例、取消/恢复是否成功、再次使用选择。先看是否降低整理负担，再决定是否增加任务拆分、日历或提醒。没有真实参与者结果。
 
 2026-09-05 本地验证：类型检查与构建、运行时完整性检查、8 项 Worker 测试、4 项存储/恢复测试、9 项 Playwright 测试通过；其中包含合成账号切换。没有进行真实账号或线上部署验证。
+
+## 2026-09-07 确认与保存一致性
+
+任务可保留 `scheduledAt: null`，在“待安排”中可编辑、完成或删除；清空已排期任务的时间也能回到待安排。旧有效日期保持原值，不反向推断用户当时是否指定。未知时长不补成 30 分钟，不计入已估时长。
+
+“周天”与“周日”使用同一规则。只给日期或时段时，本地仍给出建议时刻（如下午 14:00），确认页明确标为建议并允许清空。确认页展示原始输入、标题、类型、时间、时长、备注和标签；保存不再补入未展示的安排。整理过程绑定输入版本，保存旧结果不会清掉期间新写的输入，取消确认保留输入。
+
+验证通过：构建与运行时完整性、6 项领域/存储测试、9 项 Worker 测试、11 项 Playwright 回归。390px 确认页和待安排列表已检查；覆盖日期同义表达、本地/云端往返、旧记录兼容、延迟整理时新输入保留、取消、排期和删除恢复。点击提交/保存时保留输入焦点直到操作完成，避免键盘收起移动按钮造成首次点击落空。仅合成输入和替身，没有真实模型或站点部署。
+
+源码里程碑：[2026-09-07 捕捉与确认迭代](https://github.com/Jeffreyliu0131/nianxing/commit/aaec188385ce339973a7a7b9ea507fa14b56be98)；当前验证状态见 [GitHub CI](https://github.com/Jeffreyliu0131/nianxing/actions/workflows/ci.yml)。
