@@ -10,7 +10,8 @@ export function addLocalDays(date: Date, days: number) {
   return result;
 }
 
-export function localDateKey(value: string | Date) {
+export function localDateKey(value: string | Date | null) {
+  if (value === null) return "";
   const date = typeof value === "string" ? new Date(value) : value;
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -39,7 +40,8 @@ export function fromDateTimeLocal(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export function formatTime(value: string) {
+export function formatTime(value: string | null) {
+  if (value === null) return "待安排";
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -63,6 +65,6 @@ export function formatIdeaDate(value: string, now = new Date()) {
   return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(date);
 }
 
-export function sortByScheduledAt<T extends { scheduledAt: string }>(items: T[]) {
-  return [...items].sort((left, right) => Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt));
+export function sortByScheduledAt<T extends { scheduledAt: string | null }>(items: T[]) {
+  return [...items].sort((left, right) => (left.scheduledAt === null ? Infinity : Date.parse(left.scheduledAt)) - (right.scheduledAt === null ? Infinity : Date.parse(right.scheduledAt)));
 }

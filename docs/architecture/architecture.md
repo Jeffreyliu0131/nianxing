@@ -40,7 +40,7 @@ flowchart LR
 type Task = {
   id: string;
   title: string;
-  scheduledAt: string;
+  scheduledAt: string | null; // null = 待安排
   durationMinutes?: number;
   status: "open" | "done";
   notes?: string;

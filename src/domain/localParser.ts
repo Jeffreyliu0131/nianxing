@@ -67,7 +67,7 @@ function findDay(text: string, now: Date) {
 
   const nextWeekday = text.match(/下周([一二三四五六日天])/);
   if (nextWeekday) {
-    const index = "一二三四五六日".indexOf(nextWeekday[1]);
+    const index = "一二三四五六日".indexOf(nextWeekday[1].replace("天", "日"));
     const mondayOffset = -((now.getDay() + 6) % 7);
     return addLocalDays(now, mondayOffset + 7 + index);
   }
@@ -75,7 +75,7 @@ function findDay(text: string, now: Date) {
 
   const thisWeekday = text.match(/本周([一二三四五六日天])/);
   if (thisWeekday) {
-    const index = "一二三四五六日".indexOf(thisWeekday[1]);
+    const index = "一二三四五六日".indexOf(thisWeekday[1].replace("天", "日"));
     const mondayOffset = -((now.getDay() + 6) % 7);
     const candidate = addLocalDays(now, mondayOffset + index);
     return candidate < addLocalDays(now, 0) ? addLocalDays(candidate, 7) : candidate;
@@ -83,7 +83,7 @@ function findDay(text: string, now: Date) {
 
   const weekday = text.match(/周([一二三四五六日天])/);
   if (weekday) {
-    const index = "一二三四五六日".indexOf(weekday[1]) + 1;
+    const index = "一二三四五六日".indexOf(weekday[1].replace("天", "日")) + 1;
     const target = index === 7 ? 0 : index;
     const current = now.getDay();
     const delta = (target - current + 7) % 7 || 7;
@@ -122,7 +122,7 @@ function findDuration(text: string) {
     return Math.min(480, Math.max(5, parseNumberToken(hours[1]) * 60 + (extraHalf ? 30 : 0)));
   }
   if (/半(?:个)?小时/.test(text)) return 30;
-  return 30;
+  return null;
 }
 
 function cleanTitle(text: string) {

@@ -29,7 +29,6 @@ import {
 import { BottomSheet, KeyboardInput, KeyboardTextarea, MobileScroll, useKeyboard, useKeyboardInsets } from "./mobile";
 import {
   addLocalDays,
-  atLocalTime,
   formatIdeaDate,
   formatMonthDay,
   formatTime,
@@ -65,11 +64,6 @@ type SpeechRecognitionLike = {
   onend: (() => void) | null;
 };
 
-function nextOpenTime(now = new Date()) {
-  const hour = Math.min(21, Math.max(8, now.getHours() + 1));
-  return atLocalTime(now, hour, 0).toISOString();
-}
-
 function kindLabel(kind: CaptureKind) {
   if (kind === "task") return "行动";
   if (kind === "learning") return "学习";
@@ -97,7 +91,8 @@ function shortSyncLabel(status: CloudSyncStatus) {
   return "本机";
 }
 
-function formatMinutes(minutes: number) {
+function formatMinutes(minutes: number | undefined) {
+  if (minutes === undefined) return "时长未定";
   if (minutes < 60) return `${minutes} 分钟`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
@@ -109,7 +104,7 @@ const HORIZON_CAPACITY_MINUTES = 360;
 function openMinutes(tasks: Task[]) {
   return tasks
     .filter((task) => task.status === "open")
-    .reduce((total, task) => total + (task.durationMinutes || 30), 0);
+    .reduce((total, task) => total + (task.durationMinutes ?? 0), 0);
 }
 
 function useNativeKeyboardInset() {
@@ -165,14 +160,14 @@ function TimelineRow({ task, current, onToggle, onOpen }: { task: Task; current:
   const done = task.status === "done";
   return (
     <article className={`timeline-row ${current ? "timeline-row--current" : ""} ${done ? "timeline-row--done" : ""}`}>
-      <time className="timeline-time" dateTime={task.scheduledAt}>{formatTime(task.scheduledAt)}</time>
+      <time className="timeline-time" dateTime={task.scheduledAt ?? undefined}>{formatTime(task.scheduledAt)}</time>
       <button className="timeline-marker" type="button" onClick={onToggle} aria-label={done ? `恢复任务：${task.title}` : `完成任务：${task.title}`}>
         {done ? <CheckCircle size={19} weight="fill" /> : current ? <Target size={19} weight="duotone" /> : <Circle size={16} weight="regular" />}
       </button>
       <button className="timeline-copy" type="button" onClick={onOpen}>
         <span className="timeline-title">{task.title}</span>
         <span className="timeline-meta">
-          <span>{done ? "已完成" : current ? "此刻优先" : formatMinutes(task.durationMinutes || 30)}</span>
+          <span>{done ? "已完成" : current ? "此刻优先" : formatMinutes(task.durationMinutes)}</span>
           {task.notes ? <span className="timeline-note">{task.notes}</span> : null}
         </span>
       </button>
@@ -249,7 +244,7 @@ function OverduePanel({ tasks, onOpen }: { tasks: Task[]; onOpen: (task: Task) =
       </div>
       <div className="overdue-list">
         {tasks.slice(0, 3).map((task) => (
-          <button key={task.id} type="button" onClick={() => onOpen(task)}><span>{task.title}</span><small>{formatMonthDay(new Date(task.scheduledAt))}</small><CaretRight size={15} /></button>
+          <button key={task.id} type="button" onClick={() => onOpen(task)}><span>{task.title}</span><small>{formatMonthDay(new Date(task.scheduledAt ?? NaN))}</small><CaretRight size={15} /></button>
         ))}
       </div>
     </section>
@@ -267,11 +262,11 @@ function FuturePreview({ tasks, onSelect, onOpen }: { tasks: Task[]; onSelect: (
       </div>
       <div className="future-preview-list">
         {openTasks.length ? openTasks.slice(0, 3).map((task) => {
-          const date = new Date(task.scheduledAt);
+          const date = new Date(task.scheduledAt ?? NaN);
           return (
             <button key={task.id} type="button" onClick={() => onSelect(date)} aria-label={`在全景中查看 ${formatMonthDay(date)} 的任务：${task.title}`}>
               <span className="future-preview-date"><b>{formatMonthDay(date)}</b><small>{formatWeekday(date)} · {formatTime(task.scheduledAt)}</small></span>
-              <span className="future-preview-task"><strong>{task.title}</strong><small>{formatMinutes(task.durationMinutes || 30)}</small></span>
+              <span className="future-preview-task"><strong>{task.title}</strong><small>{formatMinutes(task.durationMinutes)}</small></span>
               <CaretRight size={16} />
             </button>
           );
@@ -358,7 +353,7 @@ function HorizonDayDetail({ date, tasks, onToggle, onOpen, onAdd }: { date: Date
                 {task.status === "done" ? <CheckCircle size={20} weight="fill" /> : <Circle size={19} />}
               </button>
               <button className="horizon-detail-copy" type="button" onClick={() => onOpen(task)}>
-                <time dateTime={task.scheduledAt}>{formatTime(task.scheduledAt)}<small>{formatMinutes(task.durationMinutes || 30)}</small></time>
+                <time dateTime={task.scheduledAt ?? undefined}>{formatTime(task.scheduledAt)}<small>{formatMinutes(task.durationMinutes)}</small></time>
                 <span><b>{task.title}</b>{task.notes ? <small>{task.notes}</small> : null}</span>
                 <CaretRight size={16} />
               </button>
@@ -403,7 +398,10 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
   const [data, setData] = useState<AppData>(() => loadAppData(accountId));
   const [view, setView] = useState<View>("today");
   const [ideaFilter, setIdeaFilter] = useState<IdeaFilter>("all");
-  const [captureText, setCaptureText] = useState("");
+  const [captureText, setCaptureTextState] = useState("");
+  const captureRevision = useRef(0);
+  const submittedCapture = useRef({ text: "", revision: -1 });
+  const setCaptureText = (value: string) => { captureRevision.current += 1; setCaptureTextState(value); };
   const [drafts, setDrafts] = useState<DraftCapture[]>([]);
   const [captureSource, setCaptureSource] = useState<"local" | "deepseek">("local");
   const [fallbackReason, setFallbackReason] = useState<string | undefined>();
@@ -442,6 +440,7 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
   const tasksByDay = useMemo(() => {
     const map = new Map<string, Task[]>();
     sortByScheduledAt(data.tasks).forEach((task) => {
+      if (task.scheduledAt === null) return;
       const key = localDateKey(task.scheduledAt);
       map.set(key, [...(map.get(key) || []), task]);
     });
@@ -455,11 +454,12 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
     const keys = new Set(nextSevenDays.map((date) => localDateKey(date)));
     return sortByScheduledAt(data.tasks.filter((task) => task.status === "open" && keys.has(localDateKey(task.scheduledAt))));
   }, [data.tasks, nextSevenDays]);
-  const overdueTasks = useMemo(() => sortByScheduledAt(data.tasks.filter((task) => task.status === "open" && new Date(task.scheduledAt) < todayStart)), [data.tasks, todayStart]);
-  const farFutureTasks = useMemo(() => sortByScheduledAt(data.tasks.filter((task) => new Date(task.scheduledAt) >= horizonEnd)), [data.tasks, horizonEnd]);
+  const unscheduledTasks = data.tasks.filter((task) => task.scheduledAt === null);
+  const overdueTasks = useMemo(() => sortByScheduledAt(data.tasks.filter((task) => task.status === "open" && new Date(task.scheduledAt ?? NaN) < todayStart)), [data.tasks, todayStart]);
+  const farFutureTasks = useMemo(() => sortByScheduledAt(data.tasks.filter((task) => new Date(task.scheduledAt ?? NaN) >= horizonEnd)), [data.tasks, horizonEnd]);
   const currentTask = todayTasks.find((task) => task.status === "open");
   const todayDone = todayTasks.filter((task) => task.status === "done").length;
-  const todayMinutes = todayTasks.filter((task) => task.status === "open").reduce((total, task) => total + (task.durationMinutes || 30), 0);
+  const todayMinutes = todayTasks.filter((task) => task.status === "open").reduce((total, task) => total + (task.durationMinutes ?? 0), 0);
   const visibleIdeas = useMemo(() => [...data.ideas].filter((idea) => idea.status !== "archived" && (ideaFilter === "all" || idea.kind === ideaFilter)).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)), [data.ideas, ideaFilter]);
 
   const clearVoiceTimers = () => {
@@ -513,6 +513,7 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
 
   const openTask = (task: Task) => { stopVoice(true); setTaskForm({ ...task, tags: [...task.tags] }); setTaskSheetOpen(true); };
   const saveTask = () => {
+    keyboard.hide();
     if (!taskForm?.title.trim()) return setToast("任务需要一个标题");
     const updatedAt = new Date().toISOString();
     setData((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === taskForm.id ? { ...taskForm, title: taskForm.title.trim(), updatedAt } : task) }));
@@ -543,6 +544,7 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
   const submitCapture = async () => {
     const text = captureText.trim();
     if (!text || organizing) return;
+    submittedCapture.current = { text, revision: captureRevision.current };
     stopVoice(true); keyboard.hide(); setOrganizing(true);
     const result = await organizeCapture(text, new Date(), aiConfigured);
     setDrafts(result.items); setCaptureSource(result.source); setFallbackReason(result.fallbackReason); setOrganizing(false);
@@ -551,14 +553,16 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
 
   const updateDraft = (clientId: string, patch: Partial<DraftCapture>) => setDrafts((current) => current.map((draft) => draft.clientId === clientId ? { ...draft, ...patch } : draft));
   const saveDrafts = () => {
+    keyboard.hide();
     const valid = drafts.filter((draft) => draft.title.trim());
     if (!valid.length) return setToast("至少保留一条记录");
     const createdAt = new Date().toISOString();
     const source = captureSource;
-    const newTasks: Task[] = valid.filter((draft) => draft.kind === "task").map((draft) => ({ id: createId("task"), title: draft.title.trim(), scheduledAt: draft.scheduledAt || nextOpenTime(), durationMinutes: draft.durationMinutes || 30, status: "open", notes: draft.notes || undefined, tags: draft.tags, source, createdAt, updatedAt: createdAt }));
+    const newTasks: Task[] = valid.filter((draft) => draft.kind === "task").map((draft) => ({ id: createId("task"), title: draft.title.trim(), scheduledAt: draft.scheduledAt, durationMinutes: draft.durationMinutes ?? undefined, status: "open", notes: draft.notes || undefined, tags: draft.tags.map((tag) => tag.trim().slice(0, 24)).filter(Boolean), source, createdAt, updatedAt: createdAt }));
     const newIdeas: Idea[] = valid.filter((draft) => draft.kind !== "task").map((draft) => ({ id: createId("idea"), title: draft.title.trim(), kind: draft.kind as Idea["kind"], notes: draft.notes || undefined, tags: draft.tags, status: "inbox", source, createdAt, updatedAt: createdAt }));
     setData((current) => ({ ...current, tasks: [...current.tasks, ...newTasks], ideas: [...newIdeas, ...current.ideas] }));
-    setCaptureText(""); setReviewOpen(false); setView(newTasks.length ? "today" : "ideas"); setToast(`已收好 ${valid.length} 条记录`);
+    if (captureRevision.current === submittedCapture.current.revision) setCaptureText("");
+    setDrafts([]); setReviewOpen(false); setView(newTasks.length ? "today" : "ideas"); setToast(`已收好 ${valid.length} 条记录`);
   };
 
   const startVoice = () => {
@@ -636,11 +640,15 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
                 <p>{currentTask ? `把注意力留给「${currentTask.title}」` : todayTasks.length ? "今天的轨道已经铺好，按自己的节奏向前。" : "今天还留着一大片空白，先放下一件最值得做的事。"}</p>
                 <div className="today-metrics" aria-label="今日概览">
                   <span><b>{todayDone}/{todayTasks.length || 0}</b><small>今日完成</small></span>
-                  <span><b>{formatMinutes(todayMinutes)}</b><small>待投入</small></span>
+                  <span><b>{formatMinutes(todayMinutes)}</b><small>已估时长{todayTasks.some((task) => task.status === "open" && task.durationMinutes === undefined) ? " · 含未定" : ""}</small></span>
                   <span><b>{overdueTasks.length}</b><small>待重排</small></span>
                 </div>
               </section>
               <TimelineSection title="今天" date={now} tasks={todayTasks} currentTaskId={currentTask?.id} onToggle={toggleTask} onOpen={openTask} onEmpty={() => focusCapture("试试输入：今天晚上 8 点读书 30 分钟")} />
+              {unscheduledTasks.length ? <section className="day-section" aria-label="待安排任务">
+                <div className="day-heading"><div><span className="section-kicker">先收好</span><h2>待安排</h2></div></div>
+                <div className="timeline-list">{unscheduledTasks.map((task) => <TimelineRow key={task.id} task={task} current={false} onToggle={() => toggleTask(task)} onOpen={() => openTask(task)} />)}</div>
+              </section> : null}
               <OverduePanel tasks={overdueTasks} onOpen={openTask} />
               <FuturePreview tasks={nearFutureTasks} onSelect={openHorizonFor} onOpen={openHorizon} />
               <TimelineSection title="明天" date={tomorrow} tasks={tomorrowTasks} onToggle={toggleTask} onOpen={openTask} onEmpty={() => focusCapture("试试输入：明天下午整理项目计划")} />
@@ -662,7 +670,7 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
                   <button type="button" onClick={() => openTask(farFutureTasks[0])}>
                     <small>未来里程碑</small>
                     <strong>{farFutureTasks[0].title}</strong>
-                    <span>{formatMonthDay(new Date(farFutureTasks[0].scheduledAt))}{farFutureTasks.length > 1 ? ` · 另有 ${farFutureTasks.length - 1} 件` : ""}</span>
+                    <span>{formatMonthDay(new Date(farFutureTasks[0].scheduledAt ?? NaN))}{farFutureTasks.length > 1 ? ` · 另有 ${farFutureTasks.length - 1} 件` : ""}</span>
                   </button>
                   <CaretRight size={17} />
                 </section>
@@ -691,7 +699,7 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
               {voiceState === "starting" ? <SpinnerGap className="is-spinning" size={21} /> : voiceState === "listening" ? <Waveform className="voice-wave" size={22} weight="fill" /> : <Microphone size={22} weight="regular" />}
             </button>
             <KeyboardInput ref={captureInputRef} className="capture-input" value={captureText} onChange={(event) => setCaptureText(event.target.value)} onFocus={() => { if (voiceActive) stopVoice(true); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void submitCapture(); } }} onBlur={() => keyboard.hide()} placeholder={voiceState === "starting" ? "正在连接麦克风…" : voiceState === "listening" ? "正在听你说…" : "记下此刻的念头…"} aria-label="记录任务或灵感" />
-            <button className="send-button" type="button" onClick={() => void submitCapture()} disabled={!captureText.trim() || organizing} aria-label="整理并保存">{organizing ? <MagicWand className="is-spinning" size={19} /> : <ArrowUp size={20} weight="bold" />}</button>
+            <button className="send-button" type="button" onPointerDown={(event) => event.preventDefault()} onClick={() => void submitCapture()} disabled={!captureText.trim() || organizing} aria-label="整理并保存">{organizing ? <MagicWand className="is-spinning" size={19} /> : <ArrowUp size={20} weight="bold" />}</button>
           </div>
           <div className="capture-status">
             {voiceState === "listening" ? <><Waveform size={14} weight="fill" /><span>正在聆听 · 再点一次结束</span></> : voiceState === "starting" ? <><SpinnerGap className="is-spinning" size={13} /><span>正在启动语音</span></> : <><Sparkle size={13} weight="fill" /><span>AI 先整理成草稿，由你确认</span></>}
@@ -702,21 +710,25 @@ export default function Prototype({ accountId = null }: { accountId?: string | n
 
       <BottomSheet open={reviewOpen} onOpenChange={setReviewOpen} title="整理好了" description={`${sourceLabel(captureSource)}，确认后才会写入你的记录`} snap={0.84}>
         <div className="review-source"><Sparkle size={16} weight="fill" /><span>{sourceLabel(captureSource)}</span>{fallbackReason ? <small>AI 不可用，已自动切换</small> : null}</div>
+        <p className="review-original">原始输入：{submittedCapture.current.text}</p>
+        <p>时间是整理建议，可修改或清空；空时间保存到“待安排”，空时长保持未定。</p>
         <div className="draft-list">
           {drafts.map((draft, index) => (
             <section className="draft-item" key={draft.clientId}>
               <div className="draft-number">{index + 1}</div><button className="draft-remove" type="button" onClick={() => setDrafts((current) => current.filter((item) => item.clientId !== draft.clientId))} aria-label="移除这条草稿"><X size={15} /></button>
-              <KindSelector value={draft.kind} onChange={(kind) => updateDraft(draft.clientId, { kind, scheduledAt: kind === "task" ? draft.scheduledAt || nextOpenTime() : null, durationMinutes: kind === "task" ? draft.durationMinutes || 30 : null })} />
-              <label className="sheet-field"><span>内容</span><KeyboardInput value={draft.title} onChange={(event) => updateDraft(draft.clientId, { title: event.target.value })} onBlur={() => keyboard.hide()} /></label>
-              {draft.kind === "task" ? <div className="field-pair"><label className="sheet-field"><span>安排时间</span><KeyboardInput type="datetime-local" value={toDateTimeLocal(draft.scheduledAt)} onChange={(event) => updateDraft(draft.clientId, { scheduledAt: fromDateTimeLocal(event.target.value) })} onBlur={() => keyboard.hide()} /></label><label className="sheet-field sheet-field--short"><span>分钟</span><KeyboardInput type="number" min="5" max="480" value={draft.durationMinutes || 30} onChange={(event) => updateDraft(draft.clientId, { durationMinutes: Number(event.target.value) || 30 })} onBlur={() => keyboard.hide()} /></label></div> : null}
+              <KindSelector value={draft.kind} onChange={(kind) => updateDraft(draft.clientId, { kind, scheduledAt: kind === "task" ? draft.scheduledAt : null, durationMinutes: kind === "task" ? draft.durationMinutes : null })} />
+              <label className="sheet-field"><span>内容</span><KeyboardInput maxLength={180} value={draft.title} onChange={(event) => updateDraft(draft.clientId, { title: event.target.value })} onBlur={() => keyboard.hide()} /></label>
+              {draft.kind === "task" ? <div className="field-pair"><label className="sheet-field"><span>安排时间（可留空）</span><KeyboardInput type="datetime-local" value={toDateTimeLocal(draft.scheduledAt)} onChange={(event) => updateDraft(draft.clientId, { scheduledAt: fromDateTimeLocal(event.target.value) })} onBlur={() => keyboard.hide()} /></label><label className="sheet-field sheet-field--short"><span>预计分钟</span><KeyboardInput type="number" min="5" max="480" value={draft.durationMinutes ?? ""} onChange={(event) => updateDraft(draft.clientId, { durationMinutes: event.target.value === "" ? null : Math.min(480, Math.max(5, Number(event.target.value))) })} onBlur={() => keyboard.hide()} /></label></div> : null}
+              <label className="sheet-field"><span>备注</span><KeyboardTextarea rows={2} maxLength={800} value={draft.notes || ""} onChange={(event) => updateDraft(draft.clientId, { notes: event.target.value || null })} onBlur={() => keyboard.hide()} /></label>
+              <label className="sheet-field"><span>标签（逗号分隔）</span><KeyboardInput value={draft.tags.join(",")} onChange={(event) => updateDraft(draft.clientId, { tags: event.target.value.split(/[,，]/).slice(0, 5) })} onBlur={() => keyboard.hide()} /></label>
             </section>
           ))}
         </div>
-        <button className="primary-sheet-action" type="button" onClick={saveDrafts}><Check size={18} weight="bold" />收下这些记录</button>
+        <button className="primary-sheet-action" type="button" onPointerDown={(event) => event.preventDefault()} onClick={saveDrafts}><Check size={18} weight="bold" />收下这些记录</button>
       </BottomSheet>
 
       <BottomSheet open={taskSheetOpen} onOpenChange={setTaskSheetOpen} title="调整计划" description={cloud.status === "synced" || cloud.status === "saving" ? "修改后会自动同步到云端" : "修改会先保存在当前设备"} snap={0.72}>
-        {taskForm ? <div className="edit-form"><button className="status-toggle" type="button" onClick={() => setTaskForm({ ...taskForm, status: taskForm.status === "done" ? "open" : "done" })}>{taskForm.status === "done" ? <CheckCircle size={18} weight="fill" /> : <Circle size={18} />}{taskForm.status === "done" ? "已完成" : "待完成"}</button><label className="sheet-field"><span>任务</span><KeyboardInput value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} onBlur={() => keyboard.hide()} /></label><div className="field-pair"><label className="sheet-field"><span>安排时间</span><KeyboardInput type="datetime-local" value={toDateTimeLocal(taskForm.scheduledAt)} onChange={(event) => setTaskForm({ ...taskForm, scheduledAt: fromDateTimeLocal(event.target.value) || taskForm.scheduledAt })} onBlur={() => keyboard.hide()} /></label><label className="sheet-field sheet-field--short"><span>分钟</span><KeyboardInput type="number" min="5" max="480" value={taskForm.durationMinutes || 30} onChange={(event) => setTaskForm({ ...taskForm, durationMinutes: Number(event.target.value) || 30 })} onBlur={() => keyboard.hide()} /></label></div><label className="sheet-field"><span>备注</span><KeyboardTextarea rows={3} value={taskForm.notes || ""} onChange={(event) => setTaskForm({ ...taskForm, notes: event.target.value })} onBlur={() => keyboard.hide()} placeholder="下一步、资料或上下文" /></label><div className="sheet-actions"><button className="danger-action" type="button" onClick={deleteTask}><Trash size={17} />删除</button><button className="primary-sheet-action" type="button" onClick={saveTask}><Check size={18} />保存修改</button></div></div> : null}
+        {taskForm ? <div className="edit-form"><button className="status-toggle" type="button" onClick={() => setTaskForm({ ...taskForm, status: taskForm.status === "done" ? "open" : "done" })}>{taskForm.status === "done" ? <CheckCircle size={18} weight="fill" /> : <Circle size={18} />}{taskForm.status === "done" ? "已完成" : "待完成"}</button><label className="sheet-field"><span>任务</span><KeyboardInput value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} onBlur={() => keyboard.hide()} /></label><div className="field-pair"><label className="sheet-field"><span>安排时间（可留空）</span><KeyboardInput type="datetime-local" value={toDateTimeLocal(taskForm.scheduledAt)} onChange={(event) => setTaskForm({ ...taskForm, scheduledAt: fromDateTimeLocal(event.target.value) })} onBlur={() => keyboard.hide()} /></label><label className="sheet-field sheet-field--short"><span>预计分钟</span><KeyboardInput type="number" min="5" max="480" value={taskForm.durationMinutes ?? ""} onChange={(event) => setTaskForm({ ...taskForm, durationMinutes: event.target.value === "" ? undefined : Math.min(480, Math.max(5, Number(event.target.value))) })} onBlur={() => keyboard.hide()} /></label></div><label className="sheet-field"><span>备注</span><KeyboardTextarea rows={3} value={taskForm.notes || ""} onChange={(event) => setTaskForm({ ...taskForm, notes: event.target.value })} onBlur={() => keyboard.hide()} placeholder="下一步、资料或上下文" /></label><div className="sheet-actions"><button className="danger-action" type="button" onClick={deleteTask}><Trash size={17} />删除</button><button className="primary-sheet-action" type="button" onPointerDown={(event) => event.preventDefault()} onClick={saveTask}><Check size={18} />保存修改</button></div></div> : null}
       </BottomSheet>
 
       <BottomSheet open={ideaSheetOpen} onOpenChange={setIdeaSheetOpen} title="整理灵感" description="保留原意，补上之后需要的上下文" snap={0.68}>

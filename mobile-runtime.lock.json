@@ -18,5 +18,5 @@
   "src/mobile/components.tsx": "7c21a1fda98b6de44ec101053fc31acbdc77ae5c59832cae83cd21ba339ccf43",
   "src/mobile/geometry.ts": "8fc5d70953be1bc7b14019dc4059657248fc4ea860eca28ad0861a1c17615168",
   "src/mobile/index.ts": "d16cd22738ebfe6601bbed696a747b4efbffa18e1629ffdf58fd8c4d31508d2d",
-  "worker/index.js": "6a584f22ed1d27e3a1c386582f6e6b4b9ae152b201014559bd1854a59514cd20"
+  "worker/index.js": "99cedcdfcab57b0e01f62dd35589f3532dfd88e0e70c8ff2204159a1d71bd087"
 }

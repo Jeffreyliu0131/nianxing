@@ -9,7 +9,7 @@ function safeDraft(value: unknown): DraftCapture | null {
   const title = typeof item?.title === "string" ? item.title.trim().slice(0, 180) : "";
   if (!title || !["task", "idea", "learning"].includes(kind)) return null;
   const parsedTime = typeof item.scheduledAt === "string" ? Date.parse(item.scheduledAt) : Number.NaN;
-  const duration = Number(item.durationMinutes);
+  const duration = typeof item.durationMinutes === "number" ? item.durationMinutes : Number.NaN;
   return {
     clientId: createId("draft"),
     kind,

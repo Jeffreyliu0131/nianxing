@@ -103,13 +103,13 @@ function validIso(value: unknown, fallback: string) {
 
 function migrateTask(value: unknown): Task | null {
   const task = value as Partial<Task>;
-  if (!task || typeof task.id !== "string" || typeof task.title !== "string" || typeof task.scheduledAt !== "string") return null;
+  if (!task || typeof task.id !== "string" || typeof task.title !== "string" || (task.scheduledAt !== null && typeof task.scheduledAt !== "string")) return null;
   const createdAt = validIso(task.createdAt, new Date().toISOString());
   return {
     ...task,
     id: task.id,
     title: task.title,
-    scheduledAt: validIso(task.scheduledAt, createdAt),
+    scheduledAt: task.scheduledAt === null ? null : validIso(task.scheduledAt, createdAt),
     durationMinutes: typeof task.durationMinutes === "number" ? task.durationMinutes : undefined,
     status: task.status === "done" ? "done" : "open",
     notes: typeof task.notes === "string" ? task.notes : undefined,

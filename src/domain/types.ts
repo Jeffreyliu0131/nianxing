@@ -7,7 +7,7 @@ export type IdeaStatus = "inbox" | "exploring" | "archived";
 export type Task = {
   id: string;
   title: string;
-  scheduledAt: string;
+  scheduledAt: string | null;
   durationMinutes?: number;
   status: TaskStatus;
   notes?: string;

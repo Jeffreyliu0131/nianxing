@@ -236,3 +236,21 @@ test("rejects stale-account writes before touching a different user's state", as
   assert.equal(payload.user.id, "user-b");
   assert.equal(payload.data, null);
 });
+
+
+test("unscheduled task and missing duration survive the authenticated state round trip", async () => {
+  const db = new FakeD1();
+  const data = sampleData('先联系导师');
+  data.tasks[0].scheduledAt = null;
+  delete data.tasks[0].durationMinutes;
+  const env = { DB: db, ASSETS: assets() };
+  const response = await worker.fetch(new Request('https://example.test/api/state', {
+    method: 'PUT', headers: { ...authHeaders('roundtrip'), 'content-type': 'application/json', 'x-nianxing-account-id': 'roundtrip' },
+    body: JSON.stringify({ baseRevision: 0, data }),
+  }), env);
+  assert.equal(response.status, 200);
+  const read = await worker.fetch(new Request('https://example.test/api/state', { headers: authHeaders('roundtrip') }), env);
+  const state = await read.json();
+  assert.equal(state.data.tasks[0].scheduledAt, null);
+  assert.equal(state.data.tasks[0].durationMinutes, undefined);
+});

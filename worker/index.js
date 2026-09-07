@@ -32,11 +32,11 @@ function safeTags(value) {
 function normalizeTask(value) {
   const id = safeString(value?.id, 160);
   const title = safeString(value?.title, 180);
-  const scheduledAt = safeIso(value?.scheduledAt);
+  const scheduledAt = value?.scheduledAt === null ? null : safeIso(value?.scheduledAt);
   const createdAt = safeIso(value?.createdAt);
   const updatedAt = safeIso(value?.updatedAt, createdAt);
-  if (!id || !title || !scheduledAt || !createdAt || !updatedAt) return null;
-  const duration = Number(value?.durationMinutes);
+  if (!id || !title || scheduledAt === "" || !createdAt || !updatedAt) return null;
+  const duration = typeof value?.durationMinutes === "number" ? value?.durationMinutes : Number.NaN;
   return {
     id,
     title,
@@ -215,7 +215,7 @@ function normalizeOrganizerItem(item) {
   const title = safeString(item?.title, 180);
   if (!title) return null;
   const parsedDate = typeof item?.scheduledAt === "string" ? Date.parse(item.scheduledAt) : Number.NaN;
-  const duration = Number(item?.durationMinutes);
+  const duration = typeof item?.durationMinutes === "number" ? item?.durationMinutes : Number.NaN;
   return {
     kind,
     title,
@@ -239,7 +239,7 @@ function organizerPrompt({ now, timezone, locale }) {
 2. 一句话同时包含行动和资料保存时可拆成两条，最多 4 条。
 3. 相对日期按当前时间和时区解析。未给具体时间的 task 选择合理时间；不要捏造地点或人物。
 4. 标题删除“提醒我、我想、帮我”等口语壳，保留用户原意。
-5. durationMinutes 取 5 到 480 的合理值；非 task 使用 null。`;
+5. 用户没有明确时长时 durationMinutes 使用 null；明确时长取 5 到 480；非 task 使用 null。不得把没有日期或时间的任务自动安排到某个时刻。`;
 }
 
 async function allowAiRequest(env, userId, ctx) {
